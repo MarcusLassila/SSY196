@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 
-
 def to_dB(x):
     return 10 * np.log10(x)
 
@@ -45,24 +44,26 @@ class BI_AWGN:
         neg = scale * np.exp(-(x + 1) ** 2 / (2 * self.noise_std ** 2))
         return 0.5 * (pos + neg)
 
-    def capacity(self, num_samples=int(2e6)):
+    def capacity(self, num_samples=int(1e7)):
         monte_carlo = -sum(np.log2(self.density(self.__call__())) for _ in range(num_samples)) / num_samples
         guassian_entropy = -0.5 * np.log2(2 * np.pi * np.e * self.noise_std ** 2)
         return monte_carlo + guassian_entropy
 
 
-rate = 0.5
+rate = 0.1
 
 def error_prob(snr_dB):
     noise_std = (2 * rate * from_dB(snr_dB)) ** -0.5
     bin_entr = 1 - BI_AWGN(noise_std).capacity() / rate
     return inv_bin_entropy(bin_entr)
 
-snrs = np.linspace(-0.4, 0.185)
+snrs = np.linspace(-2.0, -1.3)
 pbs  = [*map(error_prob, tqdm(snrs, desc=f"Computing figure 1.8 with rate={rate}"))]
 
 plt.plot(snrs, pbs)
+plt.title(rf"$p_b$ vs $E_b/N_0$ with $R={rate}$")
+plt.xlabel(r"$E_b/N_0$ (dB)")
+plt.ylabel(r"$p_b$")
 plt.yscale('log')
-plt.xlabel("E/N")
-plt.ylabel("pb")
+plt.grid(True)
 plt.show()
