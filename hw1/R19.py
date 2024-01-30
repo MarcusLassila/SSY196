@@ -11,12 +11,11 @@ def from_dB(x):
 def bin_entropy(x):
     return x * np.log2(1 / x) + (1 - x) * np.log2(1 / (1 - x))
 
-def inv_bin_entropy(x):
+def inv_bin_entropy(x, eps=1e-7):
     '''
     Inverse binary entropy function computed by binary search.
     Return value in range [0, 0.5].
     '''
-    eps = 1e-6
     low, high = 0, 0.5
     while low + eps < high:
         mid = (low + high) / 2
@@ -28,6 +27,11 @@ def inv_bin_entropy(x):
         else:
             high = mid
     return mid
+
+def error_prob(snr_dB, rate):
+    noise_std = (2 * rate * from_dB(snr_dB)) ** -0.5
+    bin_entr = 1 - BI_AWGN(noise_std).capacity() / rate
+    return inv_bin_entropy(bin_entr)
 
 class BI_AWGN:
 
@@ -44,26 +48,26 @@ class BI_AWGN:
         neg = scale * np.exp(-(x + 1) ** 2 / (2 * self.noise_std ** 2))
         return 0.5 * (pos + neg)
 
-    def capacity(self, num_samples=int(1e7)):
+    def capacity(self, num_samples=int(5e7)):
         monte_carlo = -sum(np.log2(self.density(self.__call__())) for _ in range(num_samples)) / num_samples
         guassian_entropy = -0.5 * np.log2(2 * np.pi * np.e * self.noise_std ** 2)
         return monte_carlo + guassian_entropy
 
+def create_plot():
 
-rate = 0.1
+    for rate in 0.1, 0.5:
+        snrs = np.linspace(-4.0, 0.18 if rate == 0.5 else -1.3, 100)
+        pbs = [error_prob(snr_dB, rate) for snr_dB in tqdm(snrs, desc=f"Computing figure 1.8 with rate={rate}")]
+        plt.plot(snrs, pbs)
 
-def error_prob(snr_dB):
-    noise_std = (2 * rate * from_dB(snr_dB)) ** -0.5
-    bin_entr = 1 - BI_AWGN(noise_std).capacity() / rate
-    return inv_bin_entropy(bin_entr)
+    plt.legend([r"$R=0.1$", r"$R=0.5$"])
+    plt.xlabel(r"$E_b/N_0$ (dB)")
+    plt.ylabel(r"$p_b$")
+    plt.yscale("log")
+    plt.grid(True)
+    plt.savefig(f"r19rate0{int(10 * rate)}.png")
+    # plt.show()
 
-snrs = np.linspace(-2.0, -1.3)
-pbs  = [*map(error_prob, tqdm(snrs, desc=f"Computing figure 1.8 with rate={rate}"))]
-
-plt.plot(snrs, pbs)
-plt.title(rf"$p_b$ vs $E_b/N_0$ with $R={rate}$")
-plt.xlabel(r"$E_b/N_0$ (dB)")
-plt.ylabel(r"$p_b$")
-plt.yscale('log')
-plt.grid(True)
-plt.show()
+if __name__ == "__main__":
+    # print(error_prob(0.185, 0.5))
+    create_plot()
