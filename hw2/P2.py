@@ -1,7 +1,7 @@
 import R19  # Use some of the code from Ryan/Lin 1.9
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
+from pathlib import Path
 from scipy import special
 from time import perf_counter
 
@@ -55,7 +55,7 @@ def test_syndrome_decoder():
             assert est_tx == tx
     print("[info] Syndrome decoder corrects <= 1 error on each codeword!")
 
-def estimate_BER(snr_dB, num_samples=int(2e5)):
+def estimate_BER(snr_dB, num_acc_errors=int(1e4)):
     rate = 11 / 15 # Rate for (15, 11) Hamming code
     noise_std = (2 * rate * R19.from_dB(snr_dB)) ** -0.5
     y = R19.BI_AWGN(noise_std)
@@ -63,22 +63,25 @@ def estimate_BER(snr_dB, num_samples=int(2e5)):
         return 1 if y(x) >= 0 else 0
 
     pb = 0
+    num_samples = 0
     # Suffices to test performance with all zero codeword for linear codes
-    desc = f"Simulating decoding with SNR={snr_dB:.2f} (dB)"
-    for _ in tqdm(range(num_samples), desc=desc):
+    while pb < num_acc_errors:
         # All zero codeword mapped to -1 for the BI_AWGN channel
         tx = -1 * np.ones(15, dtype=int) 
         rx = bin_iterable_to_int(map(bsc, tx))
         tx_est = syndrome_decoder(rx)
         pb += tx_est.bit_count()
-    pb /= num_samples * len(tx)
+        num_samples += 1
+    pb /= num_samples * 15
     return pb
 
 @measure_exec_time
 def plot_BER_vs_SNR():
-    snrs = np.linspace(-5, 5)
+    print("[info] Computing BER vs SNR curves...", flush=True)
+    snrs = np.linspace(-5, 8)
     pbs = [*map(estimate_BER, snrs)]
     uncoded_pbs = [qfunc(np.sqrt(2 * R19.from_dB(snr))) for snr in snrs]
+    Path("plots").mkdir(parents=True, exist_ok=True)
     plt.plot(snrs, pbs)
     plt.plot(snrs, uncoded_pbs)
     plt.legend(["coded", "uncoded"])
@@ -86,7 +89,7 @@ def plot_BER_vs_SNR():
     plt.ylabel(r"$p_b$")
     plt.yscale("log")
     plt.grid(True)
-    plt.savefig("p2_BSC_rate_05.png")
+    plt.savefig("plots/p2_BSC_BER.png")
     # plt.show()
 
 if __name__ == "__main__":
