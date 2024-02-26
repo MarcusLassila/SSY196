@@ -10,16 +10,9 @@ def to_dB(x):
 def from_dB(x):
     return 10 ** (x / 10)
 
-def phi(x):
-    ex = math.exp(x)
-    try:
-        return math.log((ex + 1) / (ex - 1))
-    except ZeroDivisionError:
-        return 10.0
-
-def sign_and_magnitude(x):
-    sign = 1 if x >= 0 else -1
-    return sign, abs(x)
+def atanh_safe(x):
+    limit = 1 - 1e-9
+    return math.atanh(min(max(x, -limit), limit))
 
 class BI_AWGN:
 
@@ -33,110 +26,105 @@ class BI_AWGN:
     def LLR(self, y):
         return 2 * y / self.noise_std ** 2
 
+class HammingCode74:
+    parity_check_matrix = np.array("1 0 1 0 1 0 1 0 1 1 0 0 1 1 0 0 0 1 1 1 1".split(),
+                                   dtype=np.uint8).reshape(3, 7)
+    rate = 4 / 7
+
 class VN:
 
     def __init__(self, idx):
         self.idx = idx
-        self.val = 0
-        self.connections = defaultdict(float)
+        self.val = None
+        self.check_nodes = defaultdict(float)
 
     def __str__(self):
         return f"X{self.idx}"
 
-    def __hash__(self):
-        return hash(repr(self))
-
 class CN:
 
     def __init__(self):
-        self.connections = defaultdict(float)
+        self.var_nodes = defaultdict(float)
 
     def __str__(self):
-        return " + ".join(f"X{vn.idx}" for vn in self.connections) + " = 0"
-
-    def __hash__(self):
-        return hash(repr(self))
+        return " + ".join(f"X{vn.idx}" for vn in self.var_nodes) + " = 0"
 
 class TannerGraph:
 
-    def __init__(self, H):
-        self.H = np.array([row[:] for row in H])
-        self.CNs = [CN() for _ in range(len(H))]
-        self.VNs = [VN(i) for i in range(len(H[0]))]
-        for i, row in enumerate(self.H):
+    def __init__(self, parity_check_matrix):
+        self.CNs = [CN() for _ in range(len(parity_check_matrix))]
+        self.VNs = [VN(i) for i in range(len(parity_check_matrix[0]))]
+        for i, row in enumerate(parity_check_matrix):
             for j, val in enumerate(row):
                 if val:
-                    self.CNs[i].connections[self.VNs[j]] = 0
-                    self.VNs[j].connections[self.CNs[i]] = 0
+                    self.CNs[i].var_nodes[self.VNs[j]] = 0
+                    self.VNs[j].check_nodes[self.CNs[i]] = 0
 
-def spa_decoder(rx, channel):
-    H = np.array([1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1], dtype=np.uint8).reshape(3, 7)
-    assert len(rx) == len(H[0])
-    graph = TannerGraph(H)
+class SPA_Decoder:
 
-    def initialize():
-        for vn, y in zip(graph.VNs, rx):
-            vn.val = channel.LLR(y)
-            for cn in vn.connections.keys():
-                vn.connections[cn] = vn.val
+    def __init__(self, channel, code):
+        self.channel = channel
+        self.code = code
+        self.graph = TannerGraph(self.code.parity_check_matrix)
+
+    def decode(self, rx):
+        assert len(rx) == len(self.code.parity_check_matrix[0])
+        self.initialize(rx)
+        for _ in range(10):
+            self.update_CNs()
+            self.update_VNs()
+            pred = self.prediction()
+            if not np.any(self.code.parity_check_matrix @ pred):
+                break
+        return pred
+
+    def initialize(self, rx):
+        for vn, y in zip(self.graph.VNs, rx):
+            vn.val = self.channel.LLR(y)
+            for cn in vn.check_nodes.keys():
+                vn.check_nodes[cn] = vn.val
+
+    def update_CNs(self):
+        for cn in self.graph.CNs:
+            for vn in cn.var_nodes.keys():
+                p = math.prod(math.tanh(0.5 * x.check_nodes[cn])
+                              for x in cn.var_nodes.keys()
+                              if x != vn)
+                cn.var_nodes[vn] = 2 * atanh_safe(p)
+
+    def update_VNs(self):
+        for vn in self.graph.VNs:
+            for cn, msg in vn.check_nodes.items():
+                s = sum(cn_.var_nodes[vn] for cn_ in vn.check_nodes.keys()) - msg
+                vn.check_nodes[cn] = vn.val + s
     
-    def update_CN():
-        for cn in graph.CNs:
-            for vn in cn.connections.keys():
-                p = 1
-                s = 0
-                for vn_ in cn.connections.keys():
-                    if vn != vn_:
-                        sign, mag = sign_and_magnitude(vn_.connections[cn])
-                        s += phi(mag)
-                        p *= sign
-                r = p * phi(s)
-                # r = math.prod(math.tanh(0.5 * vn_.connections[cn])  if vn != vn_)
-                # if r == 1.0:
-                #     r = 0.99
-                # elif r == -1.0:
-                #     r = -0.99
-                cn.connections[vn] = r # 2 * math.atanh(r)
-    
-    def update_VN():
-        for vn in graph.VNs:
-            for cn, msg in vn.connections.items():
-                s = sum(cn_.connections[vn] for cn_ in vn.connections.keys()) - msg
-                vn.connections[cn] = vn.val + s
-    
-    def prediction():
-        totals = [vn.val + sum(cn.connections[vn] for cn in vn.connections.keys()) for vn in graph.VNs]
+    def prediction(self):
+        totals = [vn.val + sum(cn.var_nodes[vn] for cn in vn.check_nodes.keys())
+                  for vn in self.graph.VNs]
         return np.array([1 if x < 0 else 0 for x in totals])
 
-    initialize()
-    for _ in range(20):
-        update_CN()
-        update_VN()
-        pred = prediction()
-        if not np.any(H @ pred):
-            break
-    
-    return pred
-
-def estimate_BER(snr_dB, num_acc_errors=int(1e2)):
-    rate = 4 / 7
-    noise_std = (2 * rate * from_dB(snr_dB)) ** -0.5
+def estimate_BER(snr_dB, num_acc_errors=int(1e4), max_iterations=int(1e6)):
+    code = HammingCode74
+    size = code.parity_check_matrix.shape[1]
+    noise_std = (2 * code.rate * from_dB(snr_dB)) ** -0.5
     channel = BI_AWGN(noise_std)
-
+    decoder = SPA_Decoder(channel, code)
     pb = 0
     num_samples = 0
-    while pb < num_acc_errors:
-        tx = np.ones(7, dtype=np.uint8) 
+    time_out_counter = 0
+    while pb < num_acc_errors and time_out_counter < max_iterations:
+        time_out_counter += 1
+        tx = np.ones(size, dtype=np.uint8) 
         rx = [*map(channel, tx)]
-        tx_est = spa_decoder(rx, channel)
+        tx_est = decoder.decode(rx)
         pb += tx_est.sum()
         num_samples += 1
-    pb /= num_samples * 7
+    pb /= num_samples * size
     return pb
 
 def plot_BER_vs_SNR():
     print("[info] Computing BER vs SNR curves...", flush=True)
-    snrs = np.linspace(-5, 8)
+    snrs = np.linspace(-5, 9)
     pbs = [*map(estimate_BER, snrs)]
     Path("plots").mkdir(parents=True, exist_ok=True)
     plt.plot(snrs, pbs)
