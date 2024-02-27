@@ -25,6 +25,14 @@ class BI_AWGN:
     
     def LLR(self, y):
         return 2 * y / self.noise_std ** 2
+    
+    @staticmethod
+    def to_bin(xs):
+        return np.array([0 if x == 1 else 1 for x in xs], dtype=np.int8)
+    
+    @staticmethod
+    def from_bin(xs):
+        return np.array([-1 if x else 1 for x in xs], dtype=np.int8)
 
 class HammingCode74:
     parity_check_matrix = np.array("1 0 1 0 1 0 1 0 1 1 0 0 1 1 0 0 0 1 1 1 1".split(),
@@ -62,9 +70,9 @@ class TannerGraph:
 
 class SPA_Decoder:
 
-    def __init__(self, channel, code):
-        self.channel = channel
+    def __init__(self, code, channel):
         self.code = code
+        self.channel = channel
         self.graph = TannerGraph(self.code.parity_check_matrix)
 
     def decode(self, rx):
@@ -74,7 +82,7 @@ class SPA_Decoder:
             self.update_CNs()
             self.update_VNs()
             pred = self.prediction()
-            if not np.any(self.code.parity_check_matrix @ pred):
+            if not np.any(self.code.parity_check_matrix @ pred % 2):
                 break
         return pred
 
@@ -103,12 +111,48 @@ class SPA_Decoder:
                   for vn in self.graph.VNs]
         return np.array([1 if x < 0 else 0 for x in totals])
 
-def estimate_BER(snr_dB, num_acc_errors=int(1e4), max_iterations=int(1e6)):
-    code = HammingCode74
+class MinDist_Decoder:
+    
+    def __init__(self, code):
+        self.code = code
+        self.size = len(code.parity_check_matrix[1])
+        
+    def generate_codewords(self):
+        def search(k, cw):
+            if k == self.size:
+                if not np.any(self.code.parity_check_matrix @ cw % 2):
+                    yield cw.copy()
+                return
+            yield from search(k + 1, cw)
+            cw[k] = (cw[k] + 1) % 2
+            yield from search(k + 1, cw)
+        yield from search(0, np.zeros(self.size, dtype=np.int8))
+            
+    def decode(self, rx):
+        assert len(rx) == self.size
+        best_dist = float('inf')
+        best_cw = None
+        for cw in map(BI_AWGN.from_bin, self.generate_codewords()):
+            dist = math.dist(rx, cw)
+            if dist < best_dist:
+                best_dist = dist
+                best_cw = cw
+        return BI_AWGN.to_bin(best_cw)
+
+def estimate_BER(snr_dB,
+                 code=HammingCode74,
+                 decoder="SPA",
+                 num_acc_errors=int(1e4),
+                 max_iterations=int(1e6)):
     size = code.parity_check_matrix.shape[1]
     noise_std = (2 * code.rate * from_dB(snr_dB)) ** -0.5
     channel = BI_AWGN(noise_std)
-    decoder = SPA_Decoder(channel, code)
+    if decoder == "SPA":
+        decoder = SPA_Decoder(code, channel)
+    elif decoder == "MIN_DIST":
+        decoder = MinDist_Decoder(code)
+    else:
+        raise ValueError("Unsupported decoder")
     pb = 0
     num_samples = 0
     time_out_counter = 0
@@ -124,10 +168,14 @@ def estimate_BER(snr_dB, num_acc_errors=int(1e4), max_iterations=int(1e6)):
 
 def plot_BER_vs_SNR():
     print("[info] Computing BER vs SNR curves...", flush=True)
-    snrs = np.linspace(-5, 9)
-    pbs = [*map(estimate_BER, snrs)]
+    snrs_spa = np.linspace(-5, 10)
+    snrs_min_dist = np.linspace(-5, 7)
+    pbs_spa = [estimate_BER(snr, decoder="SPA") for snr in snrs_spa]
+    pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
     Path("plots").mkdir(parents=True, exist_ok=True)
-    plt.plot(snrs, pbs)
+    plt.plot(snrs_spa, pbs_spa)
+    plt.plot(snrs_min_dist, pbs_min_dist)
+    plt.legend(["SPA", "MIN_DIST"])
     plt.xlabel(r"$E_b/N_0$ (dB)")
     plt.ylabel(r"$p_b$")
     plt.yscale("log")
@@ -137,3 +185,6 @@ def plot_BER_vs_SNR():
 
 if __name__ == "__main__":
     plot_BER_vs_SNR()
+    #decoder = MinDist_Decoder(HammingCode74)
+    #cws = [*decoder.generate_codewords()]
+    #print(cws)
