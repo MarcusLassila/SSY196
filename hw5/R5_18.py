@@ -126,7 +126,7 @@ class MinDist_Decoder:
             yield from search(k + 1, cw)
             cw[k] = (cw[k] + 1) % 2
             yield from search(k + 1, cw)
-        yield from search(0, np.zeros(self.size, dtype=np.int8))
+        return search(0, np.zeros(self.size, dtype=np.int8))
             
     def decode(self, rx):
         assert len(rx) == self.size
@@ -142,8 +142,8 @@ class MinDist_Decoder:
 def estimate_BER(snr_dB,
                  code=HammingCode74,
                  decoder="SPA",
-                 num_acc_errors=int(2e3),
-                 max_iterations=int(2e2),
+                 num_acc_errors=int(2e4),
+                 max_iterations=int(2e5),
                  spa_max_iterations=10):
     size = code.parity_check_matrix.shape[1]
     noise_std = (2 * code.rate * from_dB(snr_dB)) ** -0.5
@@ -170,7 +170,7 @@ def estimate_BER(snr_dB,
 def plot_BER_vs_SNR():
     print("[info] Computing BER vs SNR curves...", flush=True)
     snrs_spa = np.linspace(-5, 10)
-    snrs_min_dist = np.linspace(-5, 7)
+    snrs_min_dist = np.linspace(-5, 8)
     pbs_spa = [estimate_BER(snr, decoder="SPA") for snr in snrs_spa]
     pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
     plt.plot(snrs_spa, pbs_spa)
