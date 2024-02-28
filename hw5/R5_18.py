@@ -143,7 +143,7 @@ def estimate_BER(snr_dB,
                  code=HammingCode74,
                  decoder="SPA",
                  num_frame_errors=int(2e3),
-                 max_iters=int(1e5),
+                 max_iters=int(5e5),
                  spa_max_iters=10):
     np.random.seed(0)
     size = code.parity_check_matrix.shape[1]
@@ -172,8 +172,8 @@ def estimate_BER(snr_dB,
 
 def plot_BER_vs_SNR():
     print("[info] Computing BER vs SNR curves...", flush=True)
-    snrs_spa = np.linspace(-4, 7)
-    snrs_min_dist = np.linspace(-4, 7)
+    snrs_spa = np.linspace(-1, 8)
+    snrs_min_dist = np.linspace(-1, 8)
     pbs_spa = [estimate_BER(snr, decoder="SPA") for snr in snrs_spa]
     pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
     plt.plot(snrs_spa, pbs_spa)
@@ -189,8 +189,8 @@ def plot_BER_vs_SNR():
 
 def plot_BER_vs_SNR_spa_iteration_sweep():
     print("[info] Computing BER vs SNR curves...", flush=True)
-    snrs_spa = np.linspace(-4, 7, num=30)
-    snrs_min_dist = np.linspace(-4, 7, num=30)
+    snrs_spa = np.linspace(-1, 8)
+    snrs_min_dist = np.linspace(-1, 8)
     legend = []
     for max_iters in 1, 2, 4, 8, 16:
         legend.append(f"SPA {max_iters}")
@@ -206,7 +206,7 @@ def plot_BER_vs_SNR_spa_iteration_sweep():
     plt.yscale("log")
     plt.grid(True)
     Path("plots").mkdir(parents=True, exist_ok=True)
-    plt.savefig("plots/p5_18_BER_vs_SNR_iters.png")
+    plt.savefig("plots/p5_18_BER_vs_SNR_iters_temp.png")
     # plt.show()
 
 if __name__ == "__main__":
