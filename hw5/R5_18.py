@@ -27,12 +27,12 @@ class BI_AWGN:
         return 2 * y / self.noise_std ** 2
     
     @staticmethod
-    def to_bin(xs):
-        return np.array([0 if x == 1 else 1 for x in xs], dtype=np.int8)
+    def to_01(xs):
+        return np.select([xs == -1, xs == 1], [1, 0], xs)
     
     @staticmethod
-    def from_bin(xs):
-        return np.array([-1 if x else 1 for x in xs], dtype=np.int8)
+    def from_01(xs):
+        return np.select([xs == 0, xs == 1], [1, -1], xs)
 
 class HammingCode74:
     parity_check_matrix = np.array("1 0 1 0 1 0 1 0 1 1 0 0 1 1 0 0 0 1 1 1 1".split(),
@@ -132,18 +132,18 @@ class MinDist_Decoder:
         assert len(rx) == self.size
         best_dist = float('inf')
         best_cw = None
-        for cw in map(BI_AWGN.from_bin, self.generate_codewords()):
+        for cw in map(BI_AWGN.from_01, self.generate_codewords()):
             dist = math.dist(rx, cw)
             if dist < best_dist:
                 best_dist = dist
                 best_cw = cw
-        return BI_AWGN.to_bin(best_cw)
+        return BI_AWGN.to_01(best_cw)
 
 def estimate_BER(snr_dB,
                  code=HammingCode74,
                  decoder="SPA",
-                 num_acc_errors=int(2e4),
-                 max_iterations=int(2e5),
+                 num_acc_errors=int(2e3),
+                 max_iterations=int(2e2),
                  spa_max_iterations=10):
     size = code.parity_check_matrix.shape[1]
     noise_std = (2 * code.rate * from_dB(snr_dB)) ** -0.5
@@ -159,7 +159,7 @@ def estimate_BER(snr_dB,
     time_out_counter = 0
     while pb < num_acc_errors and time_out_counter < max_iterations:
         time_out_counter += 1
-        tx = np.ones(size, dtype=np.uint8) 
+        tx = np.ones(size, dtype=np.uint8)  # All zero codeword
         rx = [*map(channel, tx)]
         tx_est = decoder.decode(rx)
         pb += tx_est.sum()
@@ -207,8 +207,5 @@ def plot_BER_vs_SNR_spa_iteration_sweep():
     # plt.show()
 
 if __name__ == "__main__":
-    #plot_BER_vs_SNR()
+    # plot_BER_vs_SNR()
     plot_BER_vs_SNR_spa_iteration_sweep()
-    #decoder = MinDist_Decoder(HammingCode74)
-    #cws = [*decoder.generate_codewords()]
-    #print(cws)
