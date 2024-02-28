@@ -41,8 +41,7 @@ class HammingCode74:
 
 class VN:
 
-    def __init__(self, idx):
-        self.idx = idx
+    def __init__(self):
         self.val = None
         self.check_nodes = defaultdict(float)
 
@@ -61,7 +60,7 @@ class TannerGraph:
 
     def __init__(self, parity_check_matrix):
         self.CNs = [CN() for _ in range(len(parity_check_matrix))]
-        self.VNs = [VN(i) for i in range(len(parity_check_matrix[0]))]
+        self.VNs = [VN() for _ in range(len(parity_check_matrix[0]))]
         for i, row in enumerate(parity_check_matrix):
             for j, val in enumerate(row):
                 if val:
@@ -70,15 +69,16 @@ class TannerGraph:
 
 class SPA_Decoder:
 
-    def __init__(self, code, channel):
+    def __init__(self, code, channel, max_decode_iterations=10):
         self.code = code
         self.channel = channel
         self.graph = TannerGraph(self.code.parity_check_matrix)
+        self.max_decode_iterations = max_decode_iterations
 
     def decode(self, rx):
         assert len(rx) == len(self.code.parity_check_matrix[0])
         self.initialize(rx)
-        for _ in range(10):
+        for _ in range(self.max_decode_iterations):
             self.update_CNs()
             self.update_VNs()
             pred = self.prediction()
@@ -142,13 +142,14 @@ class MinDist_Decoder:
 def estimate_BER(snr_dB,
                  code=HammingCode74,
                  decoder="SPA",
-                 num_acc_errors=int(1e4),
-                 max_iterations=int(1e6)):
+                 num_acc_errors=int(2e4),
+                 max_iterations=int(2e5),
+                 spa_max_iterations=10):
     size = code.parity_check_matrix.shape[1]
     noise_std = (2 * code.rate * from_dB(snr_dB)) ** -0.5
     channel = BI_AWGN(noise_std)
     if decoder == "SPA":
-        decoder = SPA_Decoder(code, channel)
+        decoder = SPA_Decoder(code, channel, max_decode_iterations=spa_max_iterations)
     elif decoder == "MIN_DIST":
         decoder = MinDist_Decoder(code)
     else:
@@ -172,19 +173,42 @@ def plot_BER_vs_SNR():
     snrs_min_dist = np.linspace(-5, 7)
     pbs_spa = [estimate_BER(snr, decoder="SPA") for snr in snrs_spa]
     pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
-    Path("plots").mkdir(parents=True, exist_ok=True)
     plt.plot(snrs_spa, pbs_spa)
     plt.plot(snrs_min_dist, pbs_min_dist)
-    plt.legend(["SPA", "MIN_DIST"])
+    plt.legend(["SPA", "MIN DIST"])
     plt.xlabel(r"$E_b/N_0$ (dB)")
     plt.ylabel(r"$p_b$")
     plt.yscale("log")
     plt.grid(True)
+    Path("plots").mkdir(parents=True, exist_ok=True)
     plt.savefig("plots/p5_18_BER_vs_SNR_temp.png")
     # plt.show()
 
+def plot_BER_vs_SNR_spa_iteration_sweep():
+    print("[info] Computing BER vs SNR curves...", flush=True)
+    snrs_spa = np.linspace(-5, 10)
+    snrs_min_dist = np.linspace(-5, 8)
+    legend = []
+    for max_iterations in 1, 5, 10, 15, 30:
+        legend.append(f"SPA {max_iterations}")
+        pbs_spa = [estimate_BER(snr, decoder="SPA", spa_max_iterations=max_iterations)
+                   for snr in snrs_spa]
+        plt.plot(snrs_spa, pbs_spa)
+    legend.append("MIN DIST")
+    pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
+    plt.plot(snrs_min_dist, pbs_min_dist)
+    plt.legend(legend)
+    plt.xlabel(r"$E_b/N_0$ (dB)")
+    plt.ylabel(r"$p_b$")
+    plt.yscale("log")
+    plt.grid(True)
+    Path("plots").mkdir(parents=True, exist_ok=True)
+    plt.savefig("plots/p5_18_BER_vs_SNR_iterations.png")
+    # plt.show()
+
 if __name__ == "__main__":
-    plot_BER_vs_SNR()
+    #plot_BER_vs_SNR()
+    plot_BER_vs_SNR_spa_iteration_sweep()
     #decoder = MinDist_Decoder(HammingCode74)
     #cws = [*decoder.generate_codewords()]
     #print(cws)
