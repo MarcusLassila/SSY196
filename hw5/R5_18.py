@@ -69,16 +69,16 @@ class TannerGraph:
 
 class SPA_Decoder:
 
-    def __init__(self, code, channel, max_decode_iterations=10):
+    def __init__(self, code, channel, max_decode_iters=10):
         self.code = code
         self.channel = channel
         self.graph = TannerGraph(self.code.parity_check_matrix)
-        self.max_decode_iterations = max_decode_iterations
+        self.max_decode_iters = max_decode_iters
 
     def decode(self, rx):
         assert len(rx) == len(self.code.parity_check_matrix[0])
         self.initialize(rx)
-        for _ in range(self.max_decode_iterations):
+        for _ in range(self.max_decode_iters):
             self.update_CNs()
             self.update_VNs()
             pred = self.prediction()
@@ -102,8 +102,8 @@ class SPA_Decoder:
 
     def update_VNs(self):
         for vn in self.graph.VNs:
-            for cn, msg in vn.check_nodes.items():
-                s = sum(cn_.var_nodes[vn] for cn_ in vn.check_nodes.keys()) - msg
+            for cn in vn.check_nodes.keys():
+                s = sum(x.var_nodes[vn] for x in vn.check_nodes.keys() if x != cn)
                 vn.check_nodes[cn] = vn.val + s
     
     def prediction(self):
@@ -142,26 +142,29 @@ class MinDist_Decoder:
 def estimate_BER(snr_dB,
                  code=HammingCode74,
                  decoder="SPA",
-                 num_acc_errors=int(2e4),
-                 max_iterations=int(2e5),
-                 spa_max_iterations=10):
+                 num_frame_errors=int(2e3),
+                 max_iters=int(5e5),
+                 spa_max_iters=10):
+    np.random.seed(0)
     size = code.parity_check_matrix.shape[1]
     noise_std = (2 * code.rate * from_dB(snr_dB)) ** -0.5
     channel = BI_AWGN(noise_std)
     if decoder == "SPA":
-        decoder = SPA_Decoder(code, channel, max_decode_iterations=spa_max_iterations)
+        decoder = SPA_Decoder(code, channel, max_decode_iters=spa_max_iters)
     elif decoder == "MIN_DIST":
         decoder = MinDist_Decoder(code)
     else:
         raise ValueError("Unsupported decoder")
+    frame_errors = 0
     pb = 0
     num_samples = 0
     time_out_counter = 0
-    while pb < num_acc_errors and time_out_counter < max_iterations:
+    while frame_errors < num_frame_errors and time_out_counter < max_iters:
         time_out_counter += 1
         tx = np.ones(size, dtype=np.uint8)  # All zero codeword
         rx = [*map(channel, tx)]
         tx_est = decoder.decode(rx)
+        frame_errors += np.any(tx_est)
         pb += tx_est.sum()
         num_samples += 1
     pb /= num_samples * size
@@ -169,8 +172,8 @@ def estimate_BER(snr_dB,
 
 def plot_BER_vs_SNR():
     print("[info] Computing BER vs SNR curves...", flush=True)
-    snrs_spa = np.linspace(-5, 10)
-    snrs_min_dist = np.linspace(-5, 8)
+    snrs_spa = np.linspace(-1, 8)
+    snrs_min_dist = np.linspace(-1, 8)
     pbs_spa = [estimate_BER(snr, decoder="SPA") for snr in snrs_spa]
     pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
     plt.plot(snrs_spa, pbs_spa)
@@ -186,12 +189,12 @@ def plot_BER_vs_SNR():
 
 def plot_BER_vs_SNR_spa_iteration_sweep():
     print("[info] Computing BER vs SNR curves...", flush=True)
-    snrs_spa = np.linspace(-5, 10)
-    snrs_min_dist = np.linspace(-5, 8)
+    snrs_spa = np.linspace(-1, 8)
+    snrs_min_dist = np.linspace(-1, 8)
     legend = []
-    for max_iterations in 1, 5, 10, 15, 30:
-        legend.append(f"SPA {max_iterations}")
-        pbs_spa = [estimate_BER(snr, decoder="SPA", spa_max_iterations=max_iterations)
+    for max_iters in 1, 2, 4, 8, 16:
+        legend.append(f"SPA {max_iters}")
+        pbs_spa = [estimate_BER(snr, decoder="SPA", spa_max_iters=max_iters)
                    for snr in snrs_spa]
         plt.plot(snrs_spa, pbs_spa)
     legend.append("MIN DIST")
@@ -203,9 +206,9 @@ def plot_BER_vs_SNR_spa_iteration_sweep():
     plt.yscale("log")
     plt.grid(True)
     Path("plots").mkdir(parents=True, exist_ok=True)
-    plt.savefig("plots/p5_18_BER_vs_SNR_iterations.png")
+    plt.savefig("plots/p5_18_BER_vs_SNR_iters_temp.png")
     # plt.show()
 
 if __name__ == "__main__":
-    # plot_BER_vs_SNR()
-    plot_BER_vs_SNR_spa_iteration_sweep()
+    plot_BER_vs_SNR()
+    #plot_BER_vs_SNR_spa_iteration_sweep()
