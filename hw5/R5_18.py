@@ -34,10 +34,16 @@ class BI_AWGN:
     def from_01(xs):
         return np.select([xs == 0, xs == 1], [1, -1], xs)
 
-class HammingCode74:
-    parity_check_matrix = np.array("1 0 1 0 1 0 1 0 1 1 0 0 1 1 0 0 0 1 1 1 1".split(),
-                                   dtype=np.uint8).reshape(3, 7)
+class Code:
+    def __init__(self, parity_check_matrix, rate):
+        self.parity_check_matrix = parity_check_matrix
+        self.rate = rate
+
+HammingCode74 = Code(
+    parity_check_matrix = np.array("1 0 1 0 1 0 1 0 1 1 0 0 1 1 0 0 0 1 1 1 1".split()
+                                   ,dtype=np.uint8).reshape(3, 7),
     rate = 4 / 7
+)
 
 class VN:
 
@@ -140,10 +146,10 @@ class MinDist_Decoder:
         return BI_AWGN.to_01(best_cw)
 
 def estimate_BER(snr_dB,
-                 code=HammingCode74,
+                 code,
                  decoder="SPA",
                  num_frame_errors=int(2e3),
-                 max_iters=int(5e5),
+                 max_iters=int(1e5),
                  spa_max_iters=10):
     np.random.seed(0)
     size = code.parity_check_matrix.shape[1]
@@ -170,12 +176,12 @@ def estimate_BER(snr_dB,
     pb /= num_samples * size
     return pb
 
-def plot_BER_vs_SNR():
+def plot_BER_vs_SNR(code=HammingCode74):
     print("[info] Computing BER vs SNR curves...", flush=True)
     snrs_spa = np.linspace(-1, 8)
     snrs_min_dist = np.linspace(-1, 8)
-    pbs_spa = [estimate_BER(snr, decoder="SPA") for snr in snrs_spa]
-    pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
+    pbs_spa = [estimate_BER(snr, code=code, decoder="SPA") for snr in snrs_spa]
+    pbs_min_dist = [estimate_BER(snr, code=code, decoder="MIN_DIST") for snr in snrs_min_dist]
     plt.plot(snrs_spa, pbs_spa)
     plt.plot(snrs_min_dist, pbs_min_dist)
     plt.legend(["SPA", "MIN DIST"])
@@ -187,18 +193,18 @@ def plot_BER_vs_SNR():
     plt.savefig("plots/p5_18_BER_vs_SNR_temp.png")
     # plt.show()
 
-def plot_BER_vs_SNR_spa_iteration_sweep():
+def plot_BER_vs_SNR_spa_iteration_sweep(code=HammingCode74):
     print("[info] Computing BER vs SNR curves...", flush=True)
     snrs_spa = np.linspace(-1, 8)
     snrs_min_dist = np.linspace(-1, 8)
     legend = []
     for max_iters in 1, 2, 4, 8, 16:
         legend.append(f"SPA {max_iters}")
-        pbs_spa = [estimate_BER(snr, decoder="SPA", spa_max_iters=max_iters)
+        pbs_spa = [estimate_BER(snr, code=code, decoder="SPA", spa_max_iters=max_iters)
                    for snr in snrs_spa]
         plt.plot(snrs_spa, pbs_spa)
     legend.append("MIN DIST")
-    pbs_min_dist = [estimate_BER(snr, decoder="MIN_DIST") for snr in snrs_min_dist]
+    pbs_min_dist = [estimate_BER(snr, code=code, decoder="MIN_DIST") for snr in snrs_min_dist]
     plt.plot(snrs_min_dist, pbs_min_dist)
     plt.legend(legend)
     plt.xlabel(r"$E_b/N_0$ (dB)")
