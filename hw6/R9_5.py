@@ -1,31 +1,20 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from scipy.optimize import fsolve
 from functools import cache
 from pathlib import Path
 
 def phi(x):
-    if 0 <= x <= 10:
+    if 0 < x <= 10:
         return math.exp(-0.4527 * x ** 0.86 + 0.0218)  # return 1 at 0 instead?
     elif x > 10:
         return math.sqrt(math.pi / x) * math.exp(-x / 4) * (1 - 10 / (7 * x))
     else:
-        raise ValueError('Phi negative argument')
+        return 1
 
 def inv_phi(x):
-    eps = 1e-16
-    low, high = 0, 100  # 100 is enough
-    while high - low > eps:
-        mid = (low + high) / 2
-        val = phi(mid)
-        if abs(val - x) < eps:
-            low = mid
-            break
-        if val > x:
-            low = mid - eps
-        else:
-            high = mid + eps
-    return low
+    return fsolve(lambda ys: [phi(ys[0]) - x], [1])[0]
 
 @cache
 def mu_c(l, dv, dc, var):
@@ -54,7 +43,7 @@ def test_inv_phi():
         x = 100 * np.random.rand()
         y = phi(x)
         z = inv_phi(y)
-        if abs(z - x) > 1e-3:
+        if abs(z - x) > 1e-6:
             fails += 1
     if fails == 0:
         print('[info] inv_phi testcase passed.')
@@ -101,4 +90,5 @@ def plot_P10():
 if __name__ == '__main__':
     test_phi_decreasing()
     test_inv_phi()
+    plot_mu_vs_l()
     plot_P10()
