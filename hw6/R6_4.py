@@ -60,11 +60,11 @@ def plot_BER_vs_SNR(code_expanded):
     snrs_base = np.linspace(-1, 8)
     snrs_expanded = np.linspace(-1, 8)
     t0 = perf_counter()
-    pbs_base = [R5_18.estimate_BER(snr, code=BaseCode, decoder="SPA", max_iters=int(1e5))
+    pbs_base = [R5_18.estimate_BER(snr, code=BaseCode, decoder="SPA", max_iters=int(5e5))
                 for snr in snrs_base]
     t1 = perf_counter()
     print(f"[info] Base code BER finished in {t1 - t0:.4f} seconds.")
-    pbs_expanded = [R5_18.estimate_BER(snr, code=code_expanded, decoder="SPA", max_iters=int(1e5))
+    pbs_expanded = [R5_18.estimate_BER(snr, code=code_expanded, decoder="SPA", max_iters=int(5e5))
                     for snr in snrs_expanded]
     t2 = perf_counter()
     print(f"[info] Expanded code BER finished in {t2 - t1:.4f} seconds.")

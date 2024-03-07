@@ -32,14 +32,18 @@ def IAC(IEC, dc):
 def plot_EXIT():
     dv, dc = 3, 6
     rate = 1 - dv / dc
-    snr = 1.63
-    var_ch = 8 * rate * 10 ** (snr / 10)
+    snrs_dB = [0.25, 1.165, 3.0]
     xs = np.linspace(0, 1)
-    IEVs = [IEV(IAV, dv, var_ch) for IAV in xs]
     IACs = [IAC(IEC, dc) for IEC in xs]
-    plt.plot(xs, IEVs)
     plt.plot(xs, IACs)
+    legend = ['-']
+    for snr in snrs_dB:
+        legend.append(f'SNR = {snr} (dB)')
+        var_ch = 8 * rate * 10 ** (snr / 10)
+        IEVs = [IEV(IAV, dv, var_ch) for IAV in xs]
+        plt.plot(xs, IEVs)
     plt.title(f'SNR = {snr} (dB)')
+    plt.legend(legend)
     plt.grid(True)
     plt.xlabel(r'$I_{AV} (I_{EC})$')
     plt.ylabel(r'$I_{EV} (I_{AC})$')
