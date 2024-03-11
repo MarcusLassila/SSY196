@@ -83,4 +83,4 @@ if __name__ == '__main__':
     H = expand_base(BaseCode.parity_check_matrix, 3)
     print(H)
     code = R5_18.Code(H, 4 / 7)
-    plot_BER_vs_SNR(code)
+    # plot_BER_vs_SNR(code)

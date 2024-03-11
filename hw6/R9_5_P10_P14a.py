@@ -6,7 +6,7 @@ from functools import cache
 from pathlib import Path
 
 def phi(x):
-    if 0 < x <= 10:
+    if 0 <= x <= 10:
         return math.exp(-0.4527 * x ** 0.86 + 0.0218)
     elif x > 10:
         return math.sqrt(math.pi / x) * math.exp(-x / 4) * (1 - 10 / (7 * x))
@@ -93,17 +93,16 @@ def plot_9_5():
 
 def plot_P10():
     dv, dc = 3, 6
-    snr_dB = 1.165
+    snr_dB = 1.63
     rate = 1 - dv / dc
     var = 1 / (2 * rate * 10 ** (snr_dB / 10))
-    ls = range(0, 235)
-    xs = [mu_cl(l, dv, dc, var) for l in ls]
-    mu_vs = [0] + [mu_v(x, dv, var) for x in xs[:-1]]
-    mu_cs = [mu_c(x, dc) for x in mu_vs]
+    xs = np.linspace(0, 11)
+    mu_vs = [mu_v(x, dv, var) for x in xs]
+    mu_cs = [mu_c(x, dc) for x in xs]
     plt.plot(xs, mu_vs)
-    plt.plot(mu_vs, mu_cs)
+    plt.plot(mu_cs, xs)
     plt.title(f'SNR = {snr_dB} (dB)')
-    plt.axis([0, 200, 0, 200])
+    plt.axis([0, 4, 0, 11])
     plt.legend([r'$\mu_{l}^{(v)}(\mu_{l - 1}^{(c)})$', r'$\mu_{l}^{(c)}(\mu_{l}^{(v)})$'])
     Path("plots").mkdir(parents=True, exist_ok=True)
     plt.savefig("plots/P10_temp.png")
